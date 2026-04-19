@@ -69,7 +69,7 @@ def health():
 
 
 # ── Main analysis endpoint ─────────────────────────────────────────
-@app.route("/api/analyze", methods=["POST"])
+'''@app.route("/api/analyze", methods=["POST"])
 def analyze():
     """
     Accepts multipart/form-data:
@@ -150,7 +150,48 @@ def analyze():
                 metrics_out[gas]      = {"R2": 0, "RMSE": 0, "MAE": 0, "error": str(e)}
                 predictions_out[gas]  = []
                 ground_truth_out[gas] = []
+'''
+@app.route("/api/analyze", methods=["POST"])
+def analyze():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    f = request.files["file"]
+    if not f.filename or not f.filename.lower().endswith(".csv"):
+        return jsonify({"error": "Only CSV files accepted"}), 400
 
+    use_bka        = request.form.get("use_optimization", "0") == "1"
+    use_gpu        = request.form.get("gpu", "1") == "1"
+    num_gases_raw  = request.form.get("num_gases", "").strip()
+    num_gases      = int(num_gases_raw) if num_gases_raw.isdigit() else None
+    forecast_steps = int(request.form.get("forecast_steps", "60"))
+    device         = torch.device("cuda" if (use_gpu and torch.cuda.is_available()) else "cpu")
+
+    tmp_path = None  # ← FIX #1
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="wb") as tmp:
+            f.save(tmp)
+            tmp_path = tmp.name
+
+        # ... rest of logic unchanged ...
+
+        # FIX #3 — safe ttt extraction
+        ttt = rec.get("time_to_threshold_hours")
+        if isinstance(ttt, dict):
+            ttt_val = ttt.get(gas.lower())
+        elif isinstance(ttt, (int, float, np.floating)):
+            ttt_val = float(ttt)
+        else:
+            ttt_val = None
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+    finally:
+        if tmp_path:          # ← FIX #1
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
         # ── Recursive multi-step forecast per gas ─────────────────
         for gas in gas_columns:
             gas_col = next((c for c in df.columns if c.lower() == gas.lower()), None)
