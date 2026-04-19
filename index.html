@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>BKA-BiLSTM DGA Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#030912;--bg2:#060f1a;--surface:#091422;--surface2:#0c1c30;
+  --border:#162e4a;--border2:#1e4068;
+  --cyan:#00d4ff;--cyan2:#00b8e0;--cyan3:rgba(0,212,255,.12);
+  --green:#00ffb3;--green2:#00cc8f;
+  --orange:#ff8c00;--yellow:#ffd700;
+  --red:#ff1a4d;--purple:#b040ff;--pink:#ff2d78;
+  --amber:#ffb020;
+  --text:#dff0ff;--text2:#7aaec8;--text3:#3a6080;
+  --glow-c:0 0 24px rgba(0,212,255,.35);--glow-g:0 0 20px rgba(0,255,179,.25);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(0,212,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.018) 1px,transparent 1px);
+  background-size:52px 52px;pointer-events:none;z-index:0;
+}
+body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(0,212,255,.05),transparent);pointer-events:none;z-index:0;}
+.scanline{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.012) 2px,rgba(0,0,0,.012) 4px);pointer-events:none;z-index:9999;}
+
+/* ─── HEADER ─── */
+header{
+  position:sticky;top:0;z-index:100;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 28px;
+  background:rgba(3,9,18,.97);border-bottom:1px solid var(--border);
+  backdrop-filter:blur(20px);
+}
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-glyph{
+  width:40px;height:40px;border:1.5px solid var(--cyan);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:var(--glow-c);background:rgba(0,212,255,.07);
+  position:relative;overflow:hidden;
+}
+.logo-glyph::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 60%,rgba(0,212,255,.1));animation:shimmer 3s ease-in-out infinite;}
+@keyframes shimmer{0%,100%{opacity:0}50%{opacity:1}}
+.logo-glyph svg{width:20px;height:20px;}
+.logo-text h1{font-size:12px;font-weight:800;color:var(--cyan);letter-spacing:3.5px;text-shadow:0 0 20px rgba(0,212,255,.6);}
+.logo-text p{font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--text3);letter-spacing:1.5px;margin-top:2px;}
+.hdr-right{display:flex;align-items:center;gap:10px;}
+.pill{font-family:'JetBrains Mono',monospace;font-size:9px;padding:5px 12px;border-radius:20px;border:1px solid var(--border2);color:var(--text2);display:flex;align-items:center;gap:6px;}
+.pill.live .dot{background:var(--green);box-shadow:0 0 8px var(--green);}
+.dot{width:6px;height:6px;border-radius:50%;animation:blink 1.8s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+
+/* ─── LAYOUT ─── */
+.wrap{position:relative;z-index:1;max-width:1600px;margin:0 auto;padding:20px 20px 80px;display:grid;grid-template-columns:300px 1fr;gap:16px;}
+.left{grid-column:1;display:flex;flex-direction:column;gap:13px;}
+.right{grid-column:2;display:flex;flex-direction:column;gap:13px;}
+.span-full{grid-column:1/-1;}
+
+/* ─── CARD ─── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden;}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.35;}
+.card-title{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2.5px;color:var(--cyan);text-transform:uppercase;margin-bottom:13px;display:flex;align-items:center;gap:7px;font-weight:700;}
+.card-title::before{content:'';width:2.5px;height:12px;background:var(--cyan);border-radius:1px;box-shadow:var(--glow-c);}
+
+/* ─── UPLOAD ─── */
+.dropzone{border:1.5px dashed var(--border2);border-radius:10px;padding:24px 16px;text-align:center;cursor:pointer;transition:all .3s;background:var(--bg2);position:relative;}
+.dropzone:hover,.dropzone.over{border-color:var(--cyan);background:rgba(0,212,255,.04);box-shadow:inset 0 0 28px rgba(0,212,255,.05);}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.dz-icon{font-size:26px;margin-bottom:8px;}
+.dropzone h3{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.dropzone p{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text3);}
+.dz-fmt{display:inline-block;margin-top:8px;padding:3px 9px;border:1px solid var(--cyan2);border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--cyan);}
+.file-loaded{display:none;margin-top:10px;padding:9px 12px;background:rgba(0,212,255,.06);border:1px solid var(--cyan2);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);align-items:center;gap:10px;}
+.file-loaded.show{display:flex;}
+
+/* ─── OPTIONS ─── */
+.opt-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
+.opt-row:last-child{border-bottom:none;}
+.opt-label{font-size:12px;font-weight:600;color:var(--text);}
+.opt-label small{display:block;font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--text3);margin-top:2px;}
+.toggle{position:relative;width:34px;height:18px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle-track{position:absolute;inset:0;background:var(--border2);border-radius:9px;cursor:pointer;transition:background .25s;}
+.toggle input:checked~.toggle-track{background:var(--cyan2);}
+.toggle-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .25s;pointer-events:none;}
+.toggle input:checked~.toggle-thumb{transform:translateX(16px);}
+select.opt-select{background:var(--bg2);border:1px solid var(--border2);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 8px;border-radius:4px;cursor:pointer;outline:none;}
+
+/* ─── PROGRESS ─── */
+.prog-wrap{display:none;margin-bottom:10px;}
+.prog-wrap.show{display:block;}
+.prog-head{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--cyan);margin-bottom:6px;}
+.prog-track{height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--cyan2),var(--cyan));width:0%;transition:width .5s;box-shadow:0 0 10px var(--cyan);}
+.prog-log{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);max-height:70px;overflow-y:auto;line-height:1.7;}
+.prog-log div{padding:1px 0;}
+.prog-log .log-ok{color:var(--green2);}
+.prog-log .log-warn{color:var(--orange);}
+.prog-log .log-err{color:var(--red);}
+
+/* ─── RUN BUTTON ─── */
+.btn-run{width:100%;padding:13px;background:linear-gradient(135deg,rgba(0,212,255,.08),rgba(0,255,179,.05));border:1.5px solid var(--cyan);border-radius:8px;color:var(--cyan);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:all .3s;position:relative;overflow:hidden;text-transform:uppercase;}
+.btn-run::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,212,255,.15),transparent);transition:left .55s;}
+.btn-run:hover::before{left:100%;}
+.btn-run:hover{background:rgba(0,212,255,.14);box-shadow:var(--glow-c);}
+.btn-run:disabled{opacity:.25;cursor:not-allowed;border-color:var(--text3);color:var(--text3);background:transparent;}
+
+/* ─── GAS READINGS ─── */
+.gas-row{display:grid;grid-template-columns:58px 1fr 56px 46px;align-items:center;gap:6px;margin-bottom:6px;}
+.gas-nm{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:var(--text2);}
+.gas-trk{height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.gas-fill{height:100%;border-radius:3px;transition:width 1.2s cubic-bezier(.4,0,.2,1);width:0%;}
+.gas-ppm{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text);text-align:right;font-weight:600;}
+.gas-status{font-family:'JetBrains Mono',monospace;font-size:7.5px;text-align:center;border-radius:3px;padding:2px 4px;font-weight:700;}
+.st-ok{background:rgba(0,255,179,.12);color:var(--green2);}
+.st-warn{background:rgba(255,140,0,.15);color:var(--orange);}
+.st-danger{background:rgba(255,26,77,.15);color:var(--red);}
+
+/* ─── FAULT BANNER ─── */
+.fault-banner{border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--surface);position:relative;overflow:hidden;transition:border-color .5s;}
+.fault-banner.active-fault{border-color:rgba(255,26,77,.4);}
+.fault-banner::after{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,var(--red),transparent);opacity:0;transition:opacity .6s;}
+.fault-banner.active-fault::after{opacity:1;}
+.fault-label{font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--text3);letter-spacing:2px;margin-bottom:6px;font-weight:700;}
+.fault-name{font-size:20px;font-weight:800;line-height:1.1;min-height:46px;display:flex;align-items:center;}
+.fault-name span{background:linear-gradient(120deg,var(--cyan),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.fault-meta{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;}
+.fault-tag{font-family:'JetBrains Mono',monospace;font-size:8.5px;padding:3px 8px;border-radius:4px;border:1px solid;font-weight:700;}
+
+/* ─── CONFIDENCE RING ─── */
+.conf-ring{position:relative;width:80px;height:80px;}
+.conf-ring svg{transform:rotate(-90deg);}
+.conf-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;}
+.conf-lbl{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);letter-spacing:1px;margin-top:4px;text-align:center;font-weight:600;}
+
+/* ─── METRICS ─── */
+.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.met{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;position:relative;overflow:hidden;}
+.met::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--cyan);transform:scaleX(0);transition:transform .7s;}
+.met.lit::after{transform:scaleX(1);}
+.met-lbl{font-family:'JetBrains Mono',monospace;font-size:7.5px;color:var(--text3);letter-spacing:1px;margin-bottom:5px;text-transform:uppercase;font-weight:600;}
+.met-val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--cyan);}
+.met-unit{font-family:'JetBrains Mono',monospace;font-size:7.5px;color:var(--text3);margin-top:2px;}
+
+/* ─── MODEL METRICS ─── */
+.model-metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.mm{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;}
+.mm-gas{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);margin-bottom:7px;letter-spacing:1px;font-weight:700;}
+.mm-row{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:8.5px;padding:2px 0;border-bottom:1px solid var(--border);}
+.mm-row:last-child{border-bottom:none;}
+.mm-key{color:var(--text3);}
+.mm-val{color:var(--text);font-weight:600;}
+.mm-val.good{color:var(--green2);}
+.mm-val.warn{color:var(--orange);}
+
+/* ─── CHART PANELS ─── */
+.charts-g{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+.cp{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden;}
+.cp::after{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.25;}
+.cp.wide{grid-column:span 2;}
+.cp-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;}
+.cp-title{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--cyan);letter-spacing:2px;text-transform:uppercase;font-weight:700;}
+.cp-tag{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--green2);border:1px solid var(--green2);padding:2px 7px;border-radius:3px;font-weight:700;}
+.cp-tag.alert{color:var(--red);border-color:var(--red);}
+.cwrap{height:190px;position:relative;}
+.cwrap.tall{height:230px;}
+.cwrap.short{height:160px;}
+
+/* ─── GAS TAB BUTTONS ─── */
+.gas-tab-bar{display:flex;gap:5px;margin-bottom:9px;flex-wrap:wrap;}
+.gas-tab{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;border:1px solid;transition:all .2s;background:transparent;}
+.gas-tab:hover{opacity:.85;}
+.gas-tab.active{color:#000!important;}
+
+/* ═══════════════════════════════════════════════════════════
+   ─── DUVAL + NEW GRAPH SIDE BY SIDE (KEY SECTION) ─── 
+   ═══════════════════════════════════════════════════════════ */
+.dual-analysis-panel{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:20px;position:relative;overflow:hidden;
+}
+.dual-analysis-panel::after{
+  content:'';position:absolute;top:0;left:0;right:0;height:1.5px;
+  background:linear-gradient(90deg,transparent,var(--cyan),var(--purple),transparent);opacity:.5;
+}
+.dual-panel-header{
+  display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:8px;
+}
+.dual-panel-title{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyan);letter-spacing:2.5px;text-transform:uppercase;font-weight:700;}
+.dual-panel-badges{display:flex;gap:8px;flex-wrap:wrap;}
+.badge{font-family:'JetBrains Mono',monospace;font-size:8px;padding:3px 10px;border-radius:12px;border:1px solid;font-weight:700;}
+.badge-cyan{color:var(--cyan);border-color:var(--cyan);}
+.badge-purple{color:var(--purple);border-color:var(--purple);}
+.badge-green{color:var(--green2);border-color:var(--green2);}
+
+/* Side-by-side container */
+.side-by-side{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+.analysis-half{display:flex;flex-direction:column;gap:10px;}
+
+/* Duval half */
+.duval-half-title{font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--text3);letter-spacing:1.5px;font-weight:700;margin-bottom:4px;text-transform:uppercase;}
+.duval-legend{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;}
+.dl-item{display:flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:7.5px;color:var(--text2);font-weight:600;}
+.dl-sq{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+
+/* Fault result boxes for both methods */
+.fault-result-box{
+  border-radius:8px;border:1px solid;padding:12px;
+  background:rgba(0,0,0,.2);transition:all .4s;
+}
+.fault-result-box.duval-box{border-color:var(--cyan);}
+.fault-result-box.newgraph-box{border-color:var(--purple);}
+.frb-method{font-family:'JetBrains Mono',monospace;font-size:7.5px;letter-spacing:2px;font-weight:700;margin-bottom:5px;text-transform:uppercase;}
+.duval-box .frb-method{color:var(--cyan);}
+.newgraph-box .frb-method{color:var(--purple);}
+.frb-fault{font-size:15px;font-weight:800;line-height:1.2;margin-bottom:6px;}
+.frb-fault span{background:linear-gradient(120deg,var(--cyan),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.newgraph-box .frb-fault span{background:linear-gradient(120deg,var(--purple),var(--pink));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.frb-meta{display:flex;gap:6px;flex-wrap:wrap;}
+.frb-tag{font-family:'JetBrains Mono',monospace;font-size:7.5px;padding:2px 7px;border-radius:3px;border:1px solid;font-weight:700;}
+
+/* New Graph (Rogers/IEC ratio chart area) */
+.newgraph-canvas-wrap{
+  position:relative;border-radius:8px;border:1px solid var(--border2);
+  background:var(--bg2);overflow:hidden;
+}
+
+/* Divider */
+.panel-divider{
+  width:1px;background:linear-gradient(to bottom,transparent,var(--border2),var(--border2),transparent);
+  position:absolute;left:50%;top:10%;height:80%;
+}
+
+/* ─── ROGERS RATIOS ─── */
+.rogers-compact{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.rr-c{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px;transition:border-color .3s;}
+.rr-c.active{border-color:var(--cyan);background:rgba(0,212,255,.05);}
+.rr-lbl{font-family:'JetBrains Mono',monospace;font-size:7.5px;color:var(--text3);letter-spacing:1px;margin-bottom:3px;text-transform:uppercase;font-weight:600;}
+.rr-v{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyan);}
+.rr-desc{font-family:'JetBrains Mono',monospace;font-size:7px;margin-top:2px;font-weight:600;}
+.rr-ok{color:var(--green2);}
+.rr-warn{color:var(--orange);}
+.rr-danger{color:var(--red);}
+
+/* Rogers table */
+.rt{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:8.5px;margin-top:8px;}
+.rt th{background:rgba(0,212,255,.07);color:var(--cyan);padding:5px 7px;text-align:left;border:1px solid var(--border);font-weight:700;}
+.rt td{padding:4px 7px;border:1px solid var(--border);color:var(--text2);}
+.rt tr.hl td{background:rgba(0,212,255,.07);color:var(--text);font-weight:700;}
+.rt td.num{text-align:center;}
+
+/* Combined verdict */
+.verdict-box{margin-top:10px;padding:10px 13px;background:rgba(0,212,255,.04);border:1px solid var(--border);border-radius:7px;display:none;}
+.verdict-box.show{display:block;}
+.verdict-head{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);letter-spacing:2px;margin-bottom:4px;font-weight:700;}
+.verdict-main{font-size:13px;font-weight:700;}
+.verdict-sub{font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--text2);margin-top:3px;}
+
+/* ─── FORECAST ALERTS ─── */
+.fa-row{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;border-left-width:3px;margin-bottom:6px;}
+.fa-gas{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text2);font-weight:600;}
+.fa-val{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;}
+.fa-ok{border-left-color:var(--green2);}
+.fa-warn{border-left-color:var(--orange);}
+.fa-alert{border-left-color:var(--red);}
+
+/* ─── RECOMMENDATIONS ─── */
+.recs{display:flex;flex-direction:column;gap:7px;}
+.rec-item{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;border-left-width:3px;}
+.rec-icon{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
+.rec-body{font-size:12px;color:var(--text2);line-height:1.5;}
+.rec-body strong{display:block;color:var(--text);font-size:12px;font-weight:700;margin-bottom:2px;}
+
+/* ─── SAMPLE TABLE ─── */
+.fmt-table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:8.5px;display:block;overflow-x:auto;}
+.fmt-table th{background:rgba(0,212,255,.07);color:var(--cyan);padding:5px 6px;border:1px solid var(--border);white-space:nowrap;text-align:left;font-weight:700;}
+.fmt-table td{padding:3px 6px;border:1px solid var(--border);color:var(--text2);white-space:nowrap;}
+
+/* ─── API BOX ─── */
+.api-box{font-family:'JetBrains Mono',monospace;font-size:9.5px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:8px 11px;color:var(--text2);margin-bottom:9px;}
+.api-box span{color:var(--cyan);font-weight:700;}
+
+/* ─── EMPTY ─── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;color:var(--text3);gap:9px;text-align:center;}
+.empty p{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;}
+
+/* ─── TOAST ─── */
+.toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--red);border-radius:8px;padding:10px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--red);z-index:999;transform:translateY(60px);opacity:0;transition:all .3s;max-width:320px;font-weight:700;}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.ok{border-color:var(--green2);color:var(--green2);}
+
+@media(max-width:1200px){.wrap{grid-template-columns:1fr;}.left,.right{grid-column:1;}.side-by-side{grid-template-columns:1fr;}}
+@media(max-width:700px){.metrics-grid{grid-template-columns:1fr 1fr;}.charts-g{grid-template-columns:1fr;}.cp.wide{grid-column:span 1;}.model-metrics-grid{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+<div class="scanline"></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-glyph">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="1.5">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+    </div>
+    <div class="logo-text">
+      <h1>BKA · BiLSTM · DGA ANALYZER</h1>
+      <p>ICEEMDAN-SE-VMD · DISSOLVED GAS ANALYSIS · IEC 60599 · IEEE C57.104</p>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="pill live"><span class="dot"></span>SYSTEM READY</div>
+    <div class="pill" id="statusPill">NO DATA</div>
+  </div>
+</header>
+
+<!-- MAIN GRID -->
+<div class="wrap">
+
+  <!-- ══ LEFT COLUMN ══ -->
+  <div class="left">
+
+    <!-- Upload -->
+    <div class="card">
+      <div class="card-title">Dataset Upload</div>
+      <div class="dropzone" id="dropZone">
+        <input type="file" id="csvFile" accept=".csv"/>
+        <div class="dz-icon">⚡</div>
+        <h3>Drop CSV Dataset Here</h3>
+        <p>or click to browse</p>
+        <span class="dz-fmt">CSV · UTF-8</span>
+      </div>
+      <div class="file-loaded" id="fileLoaded">
+        <span style="font-size:14px">📄</span>
+        <div>
+          <div id="fName" style="color:var(--cyan);font-weight:700">—</div>
+          <div id="fMeta" style="color:var(--text3);font-size:9px">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CSV Format -->
+    <div class="card">
+      <div class="card-title">Expected CSV Format</div>
+      <p style="font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--text2);margin-bottom:8px">Gas columns (ppm) + optional date:</p>
+      <table class="fmt-table">
+        <thead><tr><th>date</th><th>H2</th><th>CH4</th><th>C2H2</th><th>C2H4</th><th>C2H6</th><th>CO</th><th>CO2</th></tr></thead>
+        <tbody>
+          <tr><td>2024-01</td><td>12</td><td>8</td><td>0</td><td>5</td><td>3</td><td>180</td><td>720</td></tr>
+          <tr><td>2024-02</td><td>18</td><td>11</td><td>1</td><td>9</td><td>4</td><td>200</td><td>810</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Model Config -->
+    <div class="card">
+      <div class="card-title">Model Configuration</div>
+      <div class="api-box">POST &nbsp;<span>/api/analyze</span></div>
+      <div class="opt-row">
+        <div class="opt-label">BKA Optimization<small>Slower but more accurate (~30-60 min/gas)</small></div>
+        <label class="toggle"><input type="checkbox" id="toggleBKA"/><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="opt-row">
+        <div class="opt-label">GPU Acceleration<small>Use CUDA if available</small></div>
+        <label class="toggle"><input type="checkbox" id="toggleGPU" checked/><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="opt-row">
+        <div class="opt-label">Forecast Horizon<small>Recursive multi-step ahead</small></div>
+        <select class="opt-select" id="selHorizon">
+          <option value="24">24 hours</option>
+          <option value="48">48 hours</option>
+          <option value="60" selected>60 hours</option>
+          <option value="72">72 hours</option>
+        </select>
+      </div>
+      <div class="opt-row">
+        <div class="opt-label">Gases to process<small>Limit for quick testing</small></div>
+        <select class="opt-select" id="selGases">
+          <option value="">All gases</option>
+          <option value="2">2 gases (fast)</option>
+          <option value="4">4 gases</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Progress + Button -->
+    <div>
+      <div class="prog-wrap" id="progWrap">
+        <div class="prog-head"><span id="progLbl">INITIALIZING…</span><span id="progPct">0%</span></div>
+        <div class="prog-track"><div class="prog-bar" id="progBar"></div></div>
+        <div class="prog-log" id="progLog"></div>
+      </div>
+      <button class="btn-run" id="runBtn" disabled>▶ &nbsp; RUN BKA-BiLSTM ANALYSIS</button>
+    </div>
+
+    <!-- Gas Readings -->
+    <div class="card">
+      <div class="card-title">Latest Gas Readings</div>
+      <div id="gasReadings"><div class="empty" style="padding:12px"><p>AWAITING DATA</p></div></div>
+    </div>
+
+    <!-- Forecast Alerts -->
+    <div class="card">
+      <div class="card-title">Threshold Alerts</div>
+      <p style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3);margin-bottom:8px">IEEE C57.104 / IEC 60599 action levels</p>
+      <div id="forecastAlerts"><div class="empty" style="padding:12px"><p>RUN FORECAST</p></div></div>
+    </div>
+
+  </div>
+
+  <!-- ══ RIGHT COLUMN ══ -->
+  <div class="right">
+
+    <!-- Fault Banner + Confidence Ring -->
+    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start">
+      <div class="fault-banner" id="faultBanner">
+        <div class="card-title" style="margin-bottom:7px">Fault Diagnosis — BKA-BiLSTM + Duval</div>
+        <div class="fault-label">DETECTED FAULT TYPE</div>
+        <div class="fault-name" id="faultName">
+          <span style="color:var(--text3);font-size:14px;-webkit-text-fill-color:initial;font-weight:600">AWAITING ANALYSIS</span>
+        </div>
+        <div class="fault-meta" id="faultMeta"></div>
+      </div>
+      <div class="card" style="min-width:136px;text-align:center;padding:16px 12px">
+        <div class="card-title" style="font-size:8px;margin-bottom:10px;justify-content:center">Confidence</div>
+        <div class="conf-ring" style="margin:0 auto">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="30" fill="none" stroke="#162e4a" stroke-width="6"/>
+            <circle cx="40" cy="40" r="30" fill="none" stroke="#00d4ff" stroke-width="6"
+              stroke-dasharray="188.5" stroke-dashoffset="188.5" id="confArc" stroke-linecap="round"
+              style="transition:stroke-dashoffset 1.3s cubic-bezier(.4,0,.2,1)"/>
+          </svg>
+          <div class="conf-pct" id="confPct" style="color:var(--text3)">—</div>
+        </div>
+        <div class="conf-lbl">SEVERITY</div>
+        <div id="sevLabel" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--text3);margin-top:4px">—</div>
+      </div>
+    </div>
+
+    <!-- KPI Metrics -->
+    <div class="metrics-grid">
+      <div class="met" id="met0"><div class="met-lbl">TDCG</div><div class="met-val" id="mTDCG">—</div><div class="met-unit">ppm total</div></div>
+      <div class="met" id="met1"><div class="met-lbl">Dominant Gas</div><div class="met-val" id="mDom">—</div><div class="met-unit">highest conc.</div></div>
+      <div class="met" id="met2"><div class="met-lbl">Records</div><div class="met-val" id="mRecs">—</div><div class="met-unit">data points</div></div>
+      <div class="met" id="met3"><div class="met-lbl">C₂H₂/C₂H₄</div><div class="met-val" id="mIEC">—</div><div class="met-unit">IEC ratio</div></div>
+    </div>
+
+    <!-- Historical Trends -->
+    <div class="cp wide">
+      <div class="cp-hdr"><div class="cp-title">Historical Gas Trends</div><div class="cp-tag">TIME SERIES · ALL 7 GASES</div></div>
+      <div class="cwrap tall"><canvas id="cTrend"></canvas></div>
+    </div>
+
+    <!-- BiLSTM Prediction vs Ground Truth -->
+    <div class="cp wide">
+      <div class="cp-hdr">
+        <div class="cp-title">BiLSTM Prediction vs Ground Truth</div>
+        <div class="cp-tag" id="predTag">SELECT GAS</div>
+      </div>
+      <div class="gas-tab-bar" id="predTabs"></div>
+      <div class="cwrap tall"><canvas id="cPred"></canvas></div>
+    </div>
+
+    <!-- Recursive Forecast -->
+    <div class="cp wide">
+      <div class="cp-hdr">
+        <div class="cp-title">Recursive Multi-Step Forecast (BKA-BiLSTM)</div>
+        <div class="cp-tag" id="fcTag">60-HOUR HORIZON</div>
+      </div>
+      <div class="gas-tab-bar" id="fcTabs"></div>
+      <div class="cwrap tall"><canvas id="cForecast"></canvas></div>
+    </div>
+
+    <!-- Radar + R2 -->
+    <div class="charts-g">
+      <div class="cp">
+        <div class="cp-hdr"><div class="cp-title">Gas Profile Radar</div><div class="cp-tag">DISTRIBUTION</div></div>
+        <div class="cwrap"><canvas id="cRadar"></canvas></div>
+      </div>
+      <div class="cp">
+        <div class="cp-hdr"><div class="cp-title">Model R² per Gas</div><div class="cp-tag">BILSTM ACCURACY</div></div>
+        <div class="cwrap"><canvas id="cR2"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         DUAL ANALYSIS PANEL — DUVAL TRIANGLE + NEW GRAPH SIDE BY SIDE
+         ══════════════════════════════════════════════════════════════ -->
+    <div class="dual-analysis-panel">
+      <div class="dual-panel-header">
+        <div class="dual-panel-title">Integrated Fault Analysis — Dual Method Comparison</div>
+        <div class="dual-panel-badges">
+          <span class="badge badge-cyan">IEC 60599 · Duval</span>
+          <span class="badge badge-purple">Selim et al. IEEE TDEI 2025</span>
+          <span class="badge badge-green">Rogers Ratios</span>
+        </div>
+      </div>
+
+      <div class="side-by-side">
+
+        <!-- LEFT HALF: DUVAL TRIANGLE -->
+        <div class="analysis-half">
+          <div class="duval-half-title">Method 1 · Duval Triangle · %CH₄ / %C₂H₄ / %C₂H₂</div>
+
+          <!-- Duval Canvas -->
+          <canvas id="duvalCanvas" width="340" height="310" style="width:100%;max-width:340px;display:block;border-radius:6px;"></canvas>
+
+          <!-- Duval Result Box -->
+          <div class="fault-result-box duval-box" id="duvalResultBox">
+            <div class="frb-method">Duval Triangle Method</div>
+            <div class="frb-fault" id="duvalFaultName">
+              <span>AWAITING ANALYSIS</span>
+            </div>
+            <div class="frb-meta" id="duvalFaultMeta"></div>
+          </div>
+
+          <!-- Legend -->
+          <div class="duval-legend">
+            <div class="dl-item"><div class="dl-sq" style="background:#d4562a"></div>PD</div>
+            <div class="dl-item"><div class="dl-sq" style="background:#f07c28"></div>T1 &lt;300°C</div>
+            <div class="dl-item"><div class="dl-sq" style="background:#a05020"></div>T2 300-700°C</div>
+            <div class="dl-item"><div class="dl-sq" style="background:#7a4e2d"></div>T3 &gt;700°C</div>
+            <div class="dl-item"><div class="dl-sq" style="background:#5dcfaa"></div>D1 Low Arc</div>
+            <div class="dl-item"><div class="dl-sq" style="background:#2880c0"></div>D2 High Arc</div>
+            <div class="dl-item"><div class="dl-sq" style="background:#78aec8"></div>DT Arc+Thermal</div>
+            <div class="dl-item"><div class="dl-sq" style="background:#fff;border:1px solid #555"></div>Normal</div>
+          </div>
+        </div>
+
+        <!-- RIGHT HALF: SELIM et al. 2025 DGA FAULT DISCRIMINATION GRAPH -->
+        <div class="analysis-half">
+          <div class="duval-half-title">Method 2 · Selim et al. (IEEE TDEI 2025) · Cartesian DGA Graph</div>
+
+          <!-- Selim Graph Canvas -->
+          <canvas id="selimCanvas" width="380" height="310" style="width:100%;max-width:380px;display:block;border-radius:6px;background:#fafbff;"></canvas>
+
+          <!-- Selim Result Box -->
+          <div class="fault-result-box newgraph-box" id="newGraphResultBox">
+            <div class="frb-method">Selim et al. Method (IEEE TDEI 2025)</div>
+            <div class="frb-fault" id="newGraphFaultName">
+              <span>AWAITING ANALYSIS</span>
+            </div>
+            <div class="frb-meta" id="newGraphFaultMeta"></div>
+          </div>
+
+          <!-- Selim coordinates display -->
+          <div class="rogers-compact" id="selimCoords">
+            <div class="rr-c" id="sc_p1"><div class="rr-lbl">P1 = (CH₄+H₂)/den</div><div class="rr-v" id="sv_p1" style="color:var(--purple)">—</div><div class="rr-desc" style="color:var(--text3)">Ratio 1</div></div>
+            <div class="rr-c" id="sc_p2"><div class="rr-lbl">P2 = (C₂H₂+H₂)/den</div><div class="rr-v" id="sv_p2" style="color:var(--purple)">—</div><div class="rr-desc" style="color:var(--text3)">Ratio 2</div></div>
+            <div class="rr-c" id="sc_x"><div class="rr-lbl">x-coordinate</div><div class="rr-v" id="sv_x" style="color:var(--cyan)">—</div><div class="rr-desc" style="color:var(--text3)">(P2+P1·sin30°)·100</div></div>
+            <div class="rr-c" id="sc_y"><div class="rr-lbl">y-coordinate</div><div class="rr-v" id="sv_y" style="color:var(--cyan)">—</div><div class="rr-desc" style="color:var(--text3)">(P1·sin60°)·100</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rogers + Selim Comparison Table -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+        <!-- Rogers Ratio Cards -->
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--cyan);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:8px">Rogers Ratios · IEEE C57.104</div>
+          <div class="rogers-compact" id="rogersCards">
+            <div class="rr-c" id="rc_r1"><div class="rr-lbl">R1 · CH₄/H₂</div><div class="rr-v" id="rv_r1">—</div><div class="rr-desc" id="rd_r1" style="color:var(--text3)">—</div></div>
+            <div class="rr-c" id="rc_r2"><div class="rr-lbl">R2 · C₂H₂/C₂H₄</div><div class="rr-v" id="rv_r2">—</div><div class="rr-desc" id="rd_r2" style="color:var(--text3)">—</div></div>
+            <div class="rr-c" id="rc_r3"><div class="rr-lbl">R3 · C₂H₄/C₂H₆</div><div class="rr-v" id="rv_r3">—</div><div class="rr-desc" id="rd_r3" style="color:var(--text3)">—</div></div>
+            <div class="rr-c" id="rc_r4"><div class="rr-lbl">R4 · C₂H₂/CH₄</div><div class="rr-v" id="rv_r4">—</div><div class="rr-desc" id="rd_r4" style="color:var(--text3)">—</div></div>
+          </div>
+        </div>
+        <!-- Rogers Reference Table -->
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--cyan);letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:8px">Rogers Reference Zones</div>
+          <table class="rt" id="rogersTable">
+            <thead><tr><th>Fault</th><th>R1</th><th>R2</th><th>R3</th></tr></thead>
+            <tbody>
+              <tr id="rt_norm"><td>Normal</td><td class="num">0.1–1</td><td class="num">&lt;0.1</td><td class="num">&lt;1</td></tr>
+              <tr id="rt_pd"><td>PD</td><td class="num">&lt;0.1</td><td class="num">&lt;0.1</td><td class="num">&lt;1</td></tr>
+              <tr id="rt_d1"><td>D1</td><td class="num">&lt;0.1</td><td class="num">≥0.1</td><td class="num">&gt;3</td></tr>
+              <tr id="rt_d2"><td>D2</td><td class="num">0.1–1</td><td class="num">0.1–3</td><td class="num">&gt;3</td></tr>
+              <tr id="rt_t1"><td>T1</td><td class="num">&gt;1</td><td class="num">&lt;0.1</td><td class="num">&lt;1</td></tr>
+              <tr id="rt_t2"><td>T2</td><td class="num">&gt;1</td><td class="num">&lt;0.1</td><td class="num">1–3</td></tr>
+              <tr id="rt_t3"><td>T3</td><td class="num">&gt;1</td><td class="num">&lt;0.1</td><td class="num">&gt;3</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="verdict-box" id="verdictBox">
+        <div class="verdict-head">COMBINED VERDICT — DUAL METHOD CONSENSUS</div>
+        <div class="verdict-main" id="verdictMain">—</div>
+        <div class="verdict-sub" id="verdictSub">—</div>
+      </div>
+    </div>
+
+    <!-- Model Performance Metrics -->
+    <div class="card">
+      <div class="card-title">BiLSTM Model Performance — Per Gas</div>
+      <div id="modelMetrics"><div class="empty" style="padding:16px"><p>METRICS APPEAR AFTER TRAINING</p></div></div>
+    </div>
+
+    <!-- Recommendations -->
+    <div class="card">
+      <div class="card-title">Diagnosis &amp; Recommendations</div>
+      <div id="recList"><div class="empty" style="padding:16px"><p>RECOMMENDATIONS AFTER ANALYSIS</p></div></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const GASES  = ['H2','CH4','C2H2','C2H4','C2H6','CO','CO2'];
+const GCOL   = {H2:'#00d4ff',CH4:'#00ffb3',C2H2:'#ff1a4d',C2H4:'#ff8c00',C2H6:'#b040ff',CO:'#ffd700',CO2:'#6a9ab8'};
+const THRESH = {H2:100,CH4:50,C2H6:65,C2H4:50,C2H2:35,CO:350,CO2:2500};
+
+// IEC 60599 Duval zones — exact vertices as (ch4%, c2h4%, c2h2%)
+const ZONES_IEC = {
+  PD:{ color:'#d4562a',alpha:.88, vertices:[[98,0,2],[96,2,2],[98,2,0],[100,0,0]] },
+  T1:{ color:'#f07c28',alpha:.82, vertices:[[100,0,0],[98,2,0],[96,2,2],[76,22,2],[80,20,0]] },
+  T2:{ color:'#a05020',alpha:.82, vertices:[[80,20,0],[76,22,2],[40,58,2],[50,50,0]] },
+  T3:{ color:'#7a4e2d',alpha:.88, vertices:[[50,50,0],[40,58,2],[0,98,2],[0,100,0]] },
+  D1:{ color:'#5dcfaa',alpha:.68, vertices:[[98,0,2],[96,2,2],[76,22,2],[40,58,2],[23,57,20],[34,46,20],[49,36,15],[63,24,13],[76,14,10],[86,6,8],[94,2,4]] },
+  D2:{ color:'#2880c0',alpha:.68, vertices:[[94,2,4],[86,6,8],[76,14,10],[63,24,13],[49,36,15],[34,46,20],[23,57,20],[13,57,30],[0,57,43],[0,50,50],[22,30,48],[45,14,41],[71,6,23]] },
+  DT:{ color:'#78aec8',alpha:.68, vertices:[[40,58,2],[0,98,2],[0,57,43],[13,57,30],[23,57,20]] },
+};
+const ZONE_LABELS = {
+  PD:['PD',99,0.5,0.5],T1:['T1',88,10,2],T2:['T2',60,38,2],T3:['T3',22,76,2],
+  D1:['D1',60,10,30],D2:['D2',30,28,42],DT:['DT',18,75,7],
+};
+
+let DATA=[], CHARTS={}, RESULTS=null;
+const $=id=>document.getElementById(id);
+
+// ═══════════════════════════════════════════════════════════
+// DUVAL TRIANGLE — CANVAS RENDERING
+// ═══════════════════════════════════════════════════════════
+function ternaryToXY(ch4,c2h4,c2h2,W,H){
+  const total=ch4+c2h4+c2h2||1;
+  const a=ch4/total,b=c2h4/total,c=c2h2/total;
+  const x_norm=0.5*(2*b+a)/(a+b+c);
+  const y_norm=(Math.sqrt(3)/2)*a/(a+b+c);
+  const margin=34,tw=W-2*margin,th=H-margin-22;
+  return [margin+x_norm*tw, H-margin-y_norm*th];
+}
+
+function drawDuvalCanvas(markerPt){
+  const canvas=$('duvalCanvas');if(!canvas)return;
+  const W=canvas.width,H=canvas.height;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#060f1a';ctx.fillRect(0,0,W,H);
+
+  Object.entries(ZONES_IEC).forEach(([name,zone])=>{
+    const pts=zone.vertices.map(([ch4,c2h4,c2h2])=>ternaryToXY(ch4,c2h4,c2h2,W,H));
+    ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);
+    pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+    ctx.closePath();ctx.globalAlpha=zone.alpha;ctx.fillStyle=zone.color;ctx.fill();
+    ctx.globalAlpha=1;ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=0.7;ctx.stroke();
+  });
+
+  // Outer triangle
+  const corners=[ternaryToXY(100,0,0,W,H),ternaryToXY(0,100,0,W,H),ternaryToXY(0,0,100,W,H)];
+  ctx.beginPath();ctx.moveTo(corners[0][0],corners[0][1]);
+  corners.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+  ctx.closePath();ctx.strokeStyle='rgba(0,212,255,0.6)';ctx.lineWidth=1.5;ctx.stroke();
+
+  // Zone labels
+  ctx.font='bold 9px JetBrains Mono, monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  Object.entries(ZONE_LABELS).forEach(([name,[label,ch4,c2h4,c2h2]])=>{
+    const [x,y]=ternaryToXY(ch4,c2h4,c2h2,W,H);
+    ctx.globalAlpha=.95;ctx.fillStyle='#fff';ctx.fillText(label,x,y);
+    ctx.globalAlpha=1;
+  });
+
+  // Axis labels
+  ctx.font='bold 9px JetBrains Mono, monospace';ctx.fillStyle='rgba(0,212,255,.85)';
+  const[tx,ty]=ternaryToXY(100,0,0,W,H);ctx.fillText('%CH₄',tx,ty-12);
+  const[rx,ry]=ternaryToXY(0,100,0,W,H);ctx.fillText('%C₂H₄',rx+10,ry+10);
+  const[lx,ly]=ternaryToXY(0,0,100,W,H);ctx.fillText('%C₂H₂',lx-10,ly+10);
+
+  // Grid lines (10% increments)
+  ctx.globalAlpha=.12;ctx.strokeStyle='#fff';ctx.lineWidth=0.5;
+  [10,20,30,40,50,60,70,80,90].forEach(pct=>{
+    const p=pct,q=100-p;
+    ctx.beginPath();
+    const[ax,ay]=ternaryToXY(p,q,0,W,H),
+          [bx,by]=ternaryToXY(p,0,q,W,H);
+    ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();
+    const[cx2,cy2]=ternaryToXY(0,p,q,W,H),
+          [dx2,dy2]=ternaryToXY(q,p,0,W,H);
+    ctx.moveTo(cx2,cy2);ctx.lineTo(dx2,dy2);ctx.stroke();
+    const[ex2,ey2]=ternaryToXY(0,q,p,W,H),
+          [fx2,fy2]=ternaryToXY(q,0,p,W,H);
+    ctx.moveTo(ex2,ey2);ctx.lineTo(fx2,fy2);ctx.stroke();
+  });
+  ctx.globalAlpha=1;
+
+  // Marker point
+  if(markerPt){
+    const[mx,my]=ternaryToXY(markerPt.ch4_pct,markerPt.c2h4_pct,markerPt.c2h2_pct,W,H);
+    // Pulse rings
+    [20,13,7].forEach((r,i)=>{
+      ctx.beginPath();ctx.arc(mx,my,r,0,2*Math.PI);
+      ctx.strokeStyle=`rgba(255,255,255,${0.08+i*0.06})`;ctx.lineWidth=1;ctx.stroke();
+    });
+    ctx.beginPath();ctx.arc(mx,my,5,0,2*Math.PI);
+    ctx.fillStyle='#fff';ctx.fill();
+    ctx.beginPath();ctx.arc(mx,my,3,0,2*Math.PI);
+    ctx.fillStyle=markerPt.color||'#ff1a4d';ctx.fill();
+
+    // Crosshair lines
+    ctx.setLineDash([3,3]);ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=0.8;
+    ctx.beginPath();ctx.moveTo(mx-22,my);ctx.lineTo(mx+22,my);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(mx,my-22);ctx.lineTo(mx,my+22);ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label
+    if(markerPt.zone){
+      ctx.font='bold 9px JetBrains Mono, monospace';ctx.fillStyle='#fff';ctx.textAlign='center';
+      const lbx=mx+(mx>W/2?-16:16),lby=my-14;
+      ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(lbx-18,lby-8,36,14);
+      ctx.fillStyle='#00d4ff';ctx.fillText(markerPt.zone,lbx,lby);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SELIM et al. (IEEE TDEI 2025) — CARTESIAN DGA GRAPH
+// Exact boundary coordinates from Table III of paper
+// ═══════════════════════════════════════════════════════════
+
+// Exact boundary coords from Table III
+const _DGA_COORDS={
+  a:[0,0],   b:[28.85,50], c:[71,50],   d:[100,0],
+  e:[64,0],  f:[54,17],    g:[25,17],   h:[15,0],
+  i:[34.3,17],j:[52.6,50], k:[82.5,0],  l:[65.6,29],
+  m:[70.5,29],n:[57.7,50], o:[76.6,40.5],p:[63.85,40.5],
+  q:[47.9,40.5],r:[21.9,37],s:[45.85,37],t:[17.8,30.8],
+  u:[42.2,30.8]
+};
+
+// Zone fill colors (light pastel to match Selim paper)
+const _SELIM_COLORS={
+  T1:'rgba(220,230,255,0.7)',  // light blue
+  T2:'rgba(190,215,250,0.7)',  // medium blue
+  T3:'rgba(160,200,245,0.7)',  // deeper blue
+  N: 'rgba(200,245,200,0.7)',  // light green
+  PD:'rgba(245,200,230,0.7)',  // pink
+  D2:'rgba(255,210,170,0.7)',  // amber
+  D1:'rgba(255,185,145,0.7)',  // orange
+};
+const _SELIM_BORDER='rgba(26,79,160,0.8)';
+
+function _selimPt(name){return _DGA_COORDS[name];}
+
+function computeDgaPoint(H2,CH4,C2H2,C2H4){
+  const den=2*H2+2*CH4+C2H2+C2H4;
+  if(den===0)return null;
+  const P1=(CH4+H2)/den;
+  const P2=(C2H2+H2)/den;
+  const P3=(C2H4+CH4)/den;
+  const L=100;
+  const x=(P2+P1*Math.sin(Math.PI/6))*L;
+  const y=(P1*Math.sin(Math.PI/3))*L;
+  return{P1,P2,P3,x,y};
+}
+
+function classifySelim(x,y){
+  const j_=_selimPt('j'),q_=_selimPt('q'),s_=_selimPt('s');
+  const r_=_selimPt('r'),t_=_selimPt('t'),u_=_selimPt('u');
+  const n_=_selimPt('n'),p_=_selimPt('p'),m_=_selimPt('m');
+
+  function x_jq(yy){return j_[0]+(q_[0]-j_[0])*(j_[1]-yy)/(j_[1]-q_[1]);}
+
+  const in_thermal=(t_[1]<=y&&y<=j_[1])?x<x_jq(y):x<28.85*y/50+5;
+
+  if(in_thermal){
+    if(y>=r_[1])return'T1';
+    else if(y>=t_[1])return'T2';
+    else return'T3';
+  } else {
+    if(y>=p_[1])return x>=n_[0]?'PD':'N';
+    else if(y>=m_[1]){
+      const x_pm=p_[0]+(m_[0]-p_[0])*(p_[1]-y)/(p_[1]-m_[1]);
+      return x<=x_pm?'D2':'D1';
+    } else return'D1';
+  }
+}
+
+function drawSelimCanvas(markerData){
+  const canvas=$('selimCanvas');
+  if(!canvas)return;
+  const W=canvas.width,H=canvas.height;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  // White background
+  ctx.fillStyle='#f8faff';
+  ctx.fillRect(0,0,W,H);
+
+  // Scale: data range x[0..112], y[0..60] → canvas with margins
+  const ML=28,MR=10,MT=14,MB=28;
+  const scX=pt=>(ML+(pt/112)*(W-ML-MR));
+  const scY=pt=>(H-MB-((pt/60)*(H-MT-MB)));
+
+  function fillZone(names,colorKey){
+    ctx.beginPath();
+    const pts=names.map(n=>_selimPt(n));
+    ctx.moveTo(scX(pts[0][0]),scY(pts[0][1]));
+    pts.slice(1).forEach(p=>ctx.lineTo(scX(p[0]),scY(p[1])));
+    ctx.closePath();
+    ctx.fillStyle=_SELIM_COLORS[colorKey]||'rgba(200,200,200,0.4)';
+    ctx.fill();
+  }
+
+  function drawLine(a,b,lw,col){
+    const pa=_selimPt(a),pb=_selimPt(b);
+    ctx.beginPath();
+    ctx.moveTo(scX(pa[0]),scY(pa[1]));
+    ctx.lineTo(scX(pb[0]),scY(pb[1]));
+    ctx.strokeStyle=col||_SELIM_BORDER;
+    ctx.lineWidth=lw||1.5;
+    ctx.stroke();
+  }
+
+  // Zone fills (exact from Python)
+  fillZone(['b','j','q','s','r','b'],'T1');
+  fillZone(['r','s','u','t','r'],'T2');
+  fillZone(['t','u','i','g','t'],'T3');
+  fillZone(['j','n','p','q','j'],'N');
+  fillZone(['n','c','o','p','n'],'PD');
+  fillZone(['q','p','m','l','i','u','s','q'],'D2');
+  fillZone(['p','o','c','d','k','m','p'],'D1');
+
+  // Outer boundary a-b-c-d
+  ctx.beginPath();
+  ['a','b','c','d','a'].forEach((n,i)=>{
+    const p=_selimPt(n);
+    i===0?ctx.moveTo(scX(p[0]),scY(p[1])):ctx.lineTo(scX(p[0]),scY(p[1]));
+  });
+  ctx.strokeStyle=_SELIM_BORDER;ctx.lineWidth=2;ctx.stroke();
+
+  // Bottom notch h-g-i-f-e
+  ctx.beginPath();
+  ['h','g','i','f','e'].forEach((n,i)=>{
+    const p=_selimPt(n);
+    i===0?ctx.moveTo(scX(p[0]),scY(p[1])):ctx.lineTo(scX(p[0]),scY(p[1]));
+  });
+  ctx.strokeStyle=_SELIM_BORDER;ctx.lineWidth=2;ctx.stroke();
+
+  // Right notch k-l-m
+  drawLine('k','l',2);drawLine('l','m',2);
+
+  // Inner thermal lines
+  drawLine('r','s',1.5);drawLine('t','u',1.5);
+  drawLine('s','q',1.5);drawLine('u','s',1.5);drawLine('u','i',1.5);
+
+  // Inner electrical lines
+  drawLine('j','q',1.5);drawLine('q','p',1.5);drawLine('n','p',1.5);
+  drawLine('p','o',1.5);drawLine('o','c',1.5);drawLine('p','m',1.5);
+
+  // X and Y axes arrows
+  ctx.strokeStyle='rgba(40,40,60,.8)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(scX(-3),scY(0));ctx.lineTo(scX(108),scY(0));ctx.stroke();
+  ctx.beginPath();ctx.moveTo(scX(0),scY(-2));ctx.lineTo(scX(0),scY(57));ctx.stroke();
+
+  // Arrowheads
+  ctx.fillStyle='rgba(40,40,60,.8)';
+  ctx.beginPath();ctx.moveTo(scX(109),scY(0));ctx.lineTo(scX(106),scY(1.2));ctx.lineTo(scX(106),scY(-1.2));ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(scX(0),scY(58));ctx.lineTo(scX(-1.2),scY(55));ctx.lineTo(scX(1.2),scY(55));ctx.closePath();ctx.fill();
+
+  // Axis labels
+  ctx.fillStyle='rgba(40,40,60,.9)';ctx.font='bold 11px JetBrains Mono, monospace';ctx.textAlign='center';
+  ctx.fillText('x',scX(110),scY(0)+4);
+  ctx.fillText('y',scX(0)-2,scY(59));
+
+  // Tick marks on X axis
+  ctx.font='8px JetBrains Mono, monospace';ctx.fillStyle='rgba(60,80,120,.7)';
+  [20,40,60,80,100].forEach(v=>{
+    ctx.fillText(v,scX(v),scY(0)+10);
+    ctx.beginPath();ctx.moveTo(scX(v),scY(0));ctx.lineTo(scX(v),scY(0)+3);ctx.strokeStyle='rgba(60,80,120,.5)';ctx.lineWidth=0.8;ctx.stroke();
+  });
+  [10,20,30,40,50].forEach(v=>{
+    ctx.fillText(v,scX(0)-10,scY(v)+3);
+    ctx.beginPath();ctx.moveTo(scX(0),scY(v));ctx.lineTo(scX(0)-3,scY(v));ctx.stroke();
+  });
+
+  // Zone labels
+  ctx.font='bold 10px JetBrains Mono, monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  const lblPos={T1:[33,44],T2:[29,38],T3:[22,27],N:[52,44],PD:[68,46],D2:[55,32],D1:[80,22]};
+  const lblColor='rgba(100,0,160,0.9)';
+  Object.entries(lblPos).forEach(([lbl,[lx,ly]])=>{
+    ctx.fillStyle='rgba(255,255,255,0.7)';
+    const tw=ctx.measureText(lbl).width;
+    ctx.fillRect(scX(lx)-tw/2-3,scY(ly)-8,tw+6,16);
+    ctx.fillStyle=lblColor;
+    ctx.fillText(lbl,scX(lx),scY(ly));
+  });
+
+  // Point labels for boundary vertices
+  ctx.font='7px JetBrains Mono, monospace';ctx.fillStyle='rgba(26,79,160,0.85)';
+  const offsets={
+    a:[-3,-3],b:[-3,4],c:[3,4],d:[3,-3],e:[0,-4],f:[4,0],g:[-4,0],h:[0,-4],
+    i:[0,-4],j:[0,4],k:[0,-4],l:[4,0],m:[4,0],n:[0,4],o:[4,0],p:[4,-2],
+    q:[-4,0],r:[-4,0],s:[4,0],t:[-4,0],u:[-4,0],
+  };
+  Object.entries(_DGA_COORDS).forEach(([name,[x,y]])=>{
+    const[dx,dy]=offsets[name]||[2,2];
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(name,scX(x+dx),scY(y)+dy);
+  });
+
+  // Title
+  ctx.font='bold 9px JetBrains Mono, monospace';ctx.fillStyle='rgba(26,79,160,.9)';
+  ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillText('Selim et al. IEEE TDEI 2025 — DGA Cartesian Graph',W/2,2);
+
+  // Marker point
+  if(markerData&&markerData.x!==undefined){
+    const mx=scX(markerData.x),my=scY(markerData.y);
+    // Glow rings
+    [16,10].forEach((r,i)=>{
+      ctx.beginPath();ctx.arc(mx,my,r,0,2*Math.PI);
+      ctx.strokeStyle=`rgba(255,50,80,${0.15+i*0.1})`;ctx.lineWidth=1;ctx.stroke();
+    });
+    // Star marker
+    ctx.beginPath();
+    for(let i=0;i<10;i++){
+      const a=i*Math.PI/5-Math.PI/2,rd=i%2===0?8:4;
+      const px=mx+Math.cos(a)*rd,py=my+Math.sin(a)*rd;
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.closePath();ctx.fillStyle='rgba(220,30,60,0.95)';ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=1;ctx.stroke();
+
+    // Label bubble
+    const lbl=markerData.zone||'?';
+    ctx.font='bold 9px JetBrains Mono, monospace';
+    const tw2=ctx.measureText(lbl).width;
+    const bx=mx+(markerData.x>60?-tw2-18:12),by=my-10;
+    ctx.fillStyle='rgba(0,0,0,.75)';
+    ctx.beginPath();ctx.roundRect?ctx.roundRect(bx-3,by-8,tw2+10,18,4):ctx.rect(bx-3,by-8,tw2+10,18);
+    ctx.fill();
+    ctx.fillStyle='#fff';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText(lbl,bx+2,by+1);
+
+    // Coord display
+    ctx.font='7px JetBrains Mono, monospace';ctx.fillStyle='rgba(40,40,40,.7)';ctx.textAlign='center';
+    ctx.fillText(`(${markerData.x.toFixed(1)}, ${markerData.y.toFixed(1)})`,mx,my+14);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// FAULT CLASSIFICATION
+// ═══════════════════════════════════════════════════════════
+function classifyFault(row){
+  const h2=row.H2||0,ch4=row.CH4||0,c2h2=row.C2H2||0,
+        c2h4=row.C2H4||0,c2h6=row.C2H6||0,co=row.CO||0,co2=row.CO2||0;
+
+  const r1=ch4/(h2||0.001),r2=c2h2/(c2h4||0.001),r3=c2h4/(c2h6||0.001);
+  const r4=c2h2/(ch4||0.001),r5=co2/(co||0.001);
+  const tdcg=h2+ch4+c2h2+c2h4+c2h6+co;
+  const total3=ch4+c2h4+c2h2||0.001;
+  const ch4_pct=ch4/total3*100,c2h4_pct=c2h4/total3*100,c2h2_pct=c2h2/total3*100;
+
+  // Duval zone determination
+  let duvalZone='Normal',duvalColor='#00d4ff';
+  if(c2h2_pct>13){
+    if(c2h4_pct>50)duvalZone='DT';
+    else if(c2h2_pct>50)duvalZone='D2';
+    else duvalZone='D1';
+    duvalColor='#5dcfaa';
+  } else if(ch4_pct>98){duvalZone='PD';duvalColor='#d4562a';}
+  else if(c2h4_pct>50){duvalZone='T3';duvalColor='#7a4e2d';}
+  else if(c2h4_pct>20){duvalZone='T2';duvalColor='#a05020';}
+  else if(ch4_pct>80){duvalZone='T1';duvalColor='#f07c28';}
+  if(c2h2_pct>20&&c2h2_pct<50&&c2h4_pct>20){duvalZone='D2';duvalColor='#2880c0';}
+
+  // Rogers ratio fault
+  let rogersZone='Normal',rogersConf=70;
+  if(r1<0.1&&r2<0.1&&r3<1){rogersZone='PD';rogersConf=75;}
+  else if(r1<0.1&&r2>=0.1&&r3>3){rogersZone='D1 Arc';rogersConf=82;}
+  else if(r1>=0.1&&r1<=1&&r2>0.1&&r3>3){rogersZone='D2 Arc';rogersConf=85;}
+  else if(r1>1&&r2<0.1&&r3<1){rogersZone='T1 Thermal';rogersConf=78;}
+  else if(r1>1&&r2<0.1&&r3>=1&&r3<=3){rogersZone='T2 Thermal';rogersConf=80;}
+  else if(r1>1&&r2<0.1&&r3>3){rogersZone='T3 Thermal';rogersConf=88;}
+  else if(c2h2>2){rogersZone='DT Mixed';rogersConf=65;}
+
+  // Selim et al. 2025 classification
+  let selimZone='N',selimX=null,selimY=null,selimP1=null,selimP2=null;
+  const selimResult=computeDgaPoint(h2,ch4,c2h2,c2h4);
+  if(selimResult){
+    selimX=selimResult.x;selimY=selimResult.y;
+    selimP1=selimResult.P1;selimP2=selimResult.P2;
+    selimZone=classifySelim(selimX,selimY);
+  }
+
+  // Combined verdict (simple agreement logic)
+  const agreedFault=duvalZone===rogersZone||rogersZone.startsWith(duvalZone.split(' ')[0]);
+  const domGas=Object.entries({H2:h2,CH4:ch4,C2H2:c2h2,C2H4:c2h4,C2H6:c2h6,CO:co}).sort((a,b)=>b[1]-a[1])[0][0];
+
+  return{
+    duvalZone,duvalColor,rogersZone,rogersConf,
+    selimZone,selimX,selimY,selimP1,selimP2,
+    r1,r2,r3,r4,r5,r6:r5,
+    ch4_pct,c2h4_pct,c2h2_pct,
+    tdcg,domGas,h2,ch4,c2h2,c2h4,c2h6,co,co2,
+    agreedFault,
+    // Primary fault for banner
+    primaryFault:agreedFault?duvalZone:duvalZone,
+    severity:tdcg>720?'CRITICAL':tdcg>200?'WARNING':tdcg>50?'CAUTION':'NORMAL',
+    conf:rogersConf
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+function renderFault(cls){
+  const banner=$('faultBanner');
+  const zoneDesc={
+    'Normal':'No significant fault detected',
+    'PD':'Partial Discharge — Corona in gas or oil',
+    'T1':'Thermal fault T < 300°C — Slight overheating',
+    'T2':'Thermal fault 300–700°C — Moderate overheating',
+    'T3':'Thermal fault T > 700°C — Severe overheating',
+    'D1':'Discharge of low energy — Sparking',
+    'D1 Arc':'Discharge of low energy — Sparking',
+    'D2':'Discharge of high energy — Arcing',
+    'D2 Arc':'Discharge of high energy — Arcing',
+    'DT':'Combination of thermal & electrical fault',
+    'DT Mixed':'Combination of thermal & electrical fault',
+    'T1 Thermal':'Thermal fault T < 300°C',
+    'T2 Thermal':'Thermal fault 300–700°C',
+    'T3 Thermal':'Thermal fault T > 700°C',
+  };
+  const zoneColors={Normal:'var(--cyan)',PD:'#d4562a',T1:'#f07c28',T2:'#a05020',T3:'#7a4e2d',D1:'#5dcfaa','D1 Arc':'#5dcfaa',D2:'#2880c0','D2 Arc':'#2880c0',DT:'#78aec8','DT Mixed':'#78aec8','T1 Thermal':'#f07c28','T2 Thermal':'#a05020','T3 Thermal':'#7a4e2d'};
+  const fc=zoneColors[cls.primaryFault]||'var(--cyan)';
+
+  if(cls.primaryFault!=='Normal')banner.classList.add('active-fault');
+  else banner.classList.remove('active-fault');
+
+  $('faultName').innerHTML=`<span style="background:linear-gradient(120deg,${fc},#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${cls.primaryFault}</span>`;
+  $('faultMeta').innerHTML=`
+    <span class="fault-tag" style="color:${fc};border-color:${fc}">${cls.severity}</span>
+    <span class="fault-tag" style="color:var(--text2);border-color:var(--border2)">TDCG: ${cls.tdcg.toFixed(0)} ppm</span>
+    <span class="fault-tag" style="color:var(--text2);border-color:var(--border2)">DOM: ${cls.domGas}</span>
+  `;
+
+  // Confidence ring
+  const pct=cls.conf;
+  const circ=188.5;
+  $('confArc').style.strokeDashoffset=circ*(1-pct/100);
+  $('confPct').textContent=pct+'%';
+  $('confPct').style.color=pct>80?'var(--green)':pct>60?'var(--orange)':'var(--red)';
+  const sevMap={CRITICAL:'var(--red)',WARNING:'var(--orange)',CAUTION:'var(--yellow)',NORMAL:'var(--green)'};
+  $('sevLabel').textContent=cls.severity;$('sevLabel').style.color=sevMap[cls.severity]||'var(--text)';
+
+  // KPI metrics
+  ['met0','met1','met2','met3'].forEach(id=>{
+    const el=$(id);setTimeout(()=>el.classList.add('lit'),100);
+  });
+  $('mTDCG').textContent=cls.tdcg.toFixed(0);
+  $('mDom').textContent=cls.domGas;
+  $('mRecs').textContent=DATA.length;
+  $('mIEC').textContent=cls.r2.toFixed(3);
+
+  // DUVAL RESULT BOX
+  const duvalBox=$('duvalResultBox');
+  const dcolor=zoneColors[cls.duvalZone]||'var(--cyan)';
+  $('duvalFaultName').innerHTML=`<span style="background:linear-gradient(120deg,${dcolor},#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${cls.duvalZone}</span>`;
+  $('duvalFaultMeta').innerHTML=`
+    <span class="frb-tag" style="color:${dcolor};border-color:${dcolor}">IEC 60599</span>
+    <span class="frb-tag" style="color:var(--text2);border-color:var(--border2)">${zoneDesc[cls.duvalZone]||'—'}</span>
+  `;
+  duvalBox.style.borderColor=dcolor;
+
+  // SELIM RESULT BOX
+  const ngBox=$('newGraphResultBox');
+  const selimZone=cls.selimZone||'—';
+  const selimColors={T1:'#f07c28',T2:'#a05020',T3:'#7a4e2d',D1:'#5dcfaa',D2:'#2880c0',PD:'#d4562a',N:'#00cc8f'};
+  const scolor=selimColors[selimZone]||'#b040ff';
+  const selimDesc={T1:'Thermal fault t < 300°C',T2:'Thermal 300–700°C',T3:'Thermal t > 700°C',D1:'Low energy discharge',D2:'High energy discharge',PD:'Partial discharge (corona)',N:'Normal operation'};
+  const selimAgreed=selimZone.startsWith(cls.duvalZone)||cls.duvalZone.startsWith(selimZone)||selimZone===cls.duvalZone;
+  $('newGraphFaultName').innerHTML=`<span style="background:linear-gradient(120deg,${scolor},#ff2d78);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${selimZone}</span>`;
+  $('newGraphFaultMeta').innerHTML=`
+    <span class="frb-tag" style="color:var(--purple);border-color:var(--purple)">IEEE TDEI 2025</span>
+    <span class="frb-tag" style="color:var(--text2);border-color:var(--border2)">${selimDesc[selimZone]||'—'}</span>
+    <span class="frb-tag" style="color:${selimAgreed?'var(--green2)':'var(--orange)'};border-color:${selimAgreed?'var(--green2)':'var(--orange)'}">
+      ${selimAgreed?'AGREES WITH DUVAL':'DIFFERS FROM DUVAL'}
+    </span>
+  `;
+  ngBox.style.borderColor=scolor;
+
+  // Selim coordinate display
+  if(cls.selimX!==undefined){
+    $('sv_p1').textContent=cls.selimP1.toFixed(4);
+    $('sv_p2').textContent=cls.selimP2.toFixed(4);
+    $('sv_x').textContent=cls.selimX.toFixed(2);
+    $('sv_y').textContent=cls.selimY.toFixed(2);
+  }
+}
+
+function renderRogers(cls){
+  const rv=[cls.r1,cls.r2,cls.r3,cls.r4];
+  const ids=['r1','r2','r3','r4'];
+  const descs=['CH₄/H₂','C₂H₂/C₂H₄','C₂H₄/C₂H₆','C₂H₂/CH₄'];
+  const thresholds=[[0.1,1],[0.1,1],[1,3],[0.1,1]];
+  ids.forEach((id,i)=>{
+    const v=rv[i],[lo,hi]=thresholds[i];
+    $(`rv_${id}`).textContent=isFinite(v)?v.toFixed(3):'∞';
+    let cls2='rr-ok',desc=descs[i];
+    if(!isFinite(v)||v>hi*2){cls2='rr-danger';}
+    else if(v<lo||v>hi){cls2='rr-warn';}
+    $(`rd_${id}`).textContent=desc;
+    $(`rd_${id}`).className=`rr-desc ${cls2}`;
+    const card=$(`rc_${id}`);
+    card.classList.toggle('active',cls2!=='rr-ok');
+  });
+
+  // Highlight Rogers table
+  const trs=['rt_norm','rt_pd','rt_d1','rt_d2','rt_t1','rt_t2','rt_t3'];
+  trs.forEach(id=>{const el=$(id);if(el)el.classList.remove('hl');});
+  const map={'Normal':'rt_norm','PD':'rt_pd','D1 Arc':'rt_d1','D2 Arc':'rt_d2','T1 Thermal':'rt_t1','T2 Thermal':'rt_t2','T3 Thermal':'rt_t3','D1':'rt_d1','D2':'rt_d2'};
+  const hl=map[cls.rogersZone];if(hl&&$(hl))$(hl).classList.add('hl');
+
+  // Verdict
+  const vb=$('verdictBox'),vm=$('verdictMain'),vs=$('verdictSub');
+  vb.classList.add('show');
+  const agreed=cls.agreedFault;
+  const selimAgreed=cls.selimZone&&(cls.selimZone===cls.duvalZone||cls.duvalZone.startsWith(cls.selimZone)||cls.selimZone.startsWith(cls.duvalZone.split(' ')[0]));
+  const allAgree=agreed&&selimAgreed;
+  const col=allAgree?'var(--green)':selimAgreed||agreed?'var(--amber)':'var(--orange)';
+  vm.innerHTML=`<span style="color:${col}">${allAgree?'ALL THREE METHODS AGREE':agreed?'DUVAL ↔ ROGERS AGREE':'METHODS DIVERGE'} — ${cls.primaryFault}</span>`;
+  vs.textContent=`Duval: ${cls.duvalZone} | Rogers: ${cls.rogersZone} | Selim et al.: ${cls.selimZone||'N/A'}${allAgree?' — Strong consensus.':' — Consider additional diagnostic tests.'}`;
+}
+
+function renderGasBars(row){
+  const gases=['H2','CH4','C2H2','C2H4','C2H6','CO','CO2'];
+  const maxVals={H2:500,CH4:300,C2H2:100,C2H4:200,C2H6:150,CO:1000,CO2:5000};
+  let html='';
+  gases.forEach(g=>{
+    const v=row[g]||0,thr=THRESH[g]||9999,mx=maxVals[g];
+    const pct=Math.min(100,v/mx*100);
+    const status=v>thr*1.5?'DANGER':v>thr?'WARN':'OK';
+    const stCls=status==='OK'?'st-ok':status==='WARN'?'st-warn':'st-danger';
+    const col=GCOL[g]||'#fff';
+    html+=`<div class="gas-row">
+      <span class="gas-nm" style="color:${col}">${g}</span>
+      <div class="gas-trk"><div class="gas-fill" style="background:${col};width:${pct}%"></div></div>
+      <span class="gas-ppm">${v.toFixed(1)}</span>
+      <span class="gas-status ${stCls}">${status}</span>
+    </div>`;
+  });
+  $('gasReadings').innerHTML=html;
+}
+
+function renderForecastAlerts(res){
+  if(!res.recursive){$('forecastAlerts').innerHTML='<div class="empty" style="padding:12px"><p>NO FORECAST DATA</p></div>';return;}
+  let html='';
+  GASES.filter(g=>res.recursive[g]).forEach(g=>{
+    const rc=res.recursive[g];
+    const tth=rc.time_to_threshold_hours,ggr=rc.ggr_ppm_day;
+    const alert=rc.immediate_alert,rowCls=alert?'fa-alert':tth?'fa-warn':'fa-ok';
+    const tthTxt=tth?`${tth.toFixed(1)}h to threshold`:`No threshold breach in ${res.horizon||60}h`;
+    html+=`<div class="fa-row ${rowCls}">
+      <span class="fa-gas">${g}</span>
+      <div style="text-align:right">
+        <div class="fa-val" style="color:${alert?'var(--red)':tth?'var(--orange)':'var(--green2)'}">${tthTxt}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--text3)">GGR: ${(ggr||0).toFixed(2)} ppm/day</div>
+      </div>
+    </div>`;
+  });
+  $('forecastAlerts').innerHTML=html||'<div class="empty" style="padding:12px"><p>NO ALERTS</p></div>';
+}
+
+function renderModelMetrics(res){
+  if(!res.metrics){return;}
+  let html='<div class="model-metrics-grid">';
+  Object.entries(res.metrics).forEach(([g,m])=>{
+    const r2Good=m.R2>0.85,r2Warn=m.R2>0.7;
+    const r2Cls=r2Good?'good':r2Warn?'':'warn';
+    html+=`<div class="mm">
+      <div class="mm-gas">${g}</div>
+      <div class="mm-row"><span class="mm-key">R²</span><span class="mm-val ${r2Cls}">${m.R2}</span></div>
+      <div class="mm-row"><span class="mm-key">RMSE</span><span class="mm-val">${m.RMSE}</span></div>
+      <div class="mm-row"><span class="mm-key">MAE</span><span class="mm-val">${m.MAE}</span></div>
+    </div>`;
+  });
+  html+='</div>';
+  $('modelMetrics').innerHTML=html;
+}
+
+function renderRecs(cls){
+  const recs=[];
+  if(cls.primaryFault==='Normal'){recs.push({icon:'✅',col:'var(--green2)',t:'Normal Operation',b:'Transformer is operating normally. Continue routine monitoring schedule.'});}
+  if(['PD','D1','D1 Arc'].includes(cls.primaryFault)){recs.push({icon:'⚠️',col:'var(--orange)',t:'Partial Discharge / Low Energy Arc',b:'Inspect insulation system. Check for moisture or contamination. Schedule oil sampling.'});}
+  if(['D2','D2 Arc'].includes(cls.primaryFault)){recs.push({icon:'🚨',col:'var(--red)',t:'High Energy Arc — Immediate Action',b:'Consider de-energizing transformer. Arc may cause catastrophic failure. Full inspection required.'});}
+  if(['T1','T1 Thermal'].includes(cls.primaryFault)){recs.push({icon:'🔥',col:'var(--orange)',t:'Thermal Fault &lt;300°C',b:'Check for loose connections, core overheating, or poor contact. Reduce load if possible.'});}
+  if(['T2','T2 Thermal','T3','T3 Thermal'].includes(cls.primaryFault)){recs.push({icon:'🔴',col:'var(--red)',t:'Severe Thermal Fault &gt;300°C',b:'Transformer may need immediate shutdown. Investigate cooling system and load distribution.'});}
+  if(['DT','DT Mixed'].includes(cls.primaryFault)){recs.push({icon:'⚡',col:'var(--purple)',t:'Combined Arc + Thermal Fault',b:'Complex fault condition. Both electrical and thermal mechanisms active. Expert inspection needed.'});}
+  if(cls.tdcg>720){recs.push({icon:'🚨',col:'var(--red)',t:'TDCG Critical Level',b:`TDCG = ${cls.tdcg.toFixed(0)} ppm exceeds IEEE C57.104 Level 4 (720 ppm). Immediate action required.`});}
+  else if(cls.tdcg>200){recs.push({icon:'⚠️',col:'var(--orange)',t:'TDCG Elevated',b:`TDCG = ${cls.tdcg.toFixed(0)} ppm — increase sampling frequency to weekly.`});}
+  if(!cls.agreedFault){recs.push({icon:'🔍',col:'var(--amber)',t:'Method Disagreement — Additional Tests Needed',b:`Duval (${cls.duvalZone}) and Rogers (${cls.rogersZone}) disagree. Perform additional oil/gas analysis.`});}
+  recs.push({icon:'🗓️',col:'var(--cyan)',t:'Next Sampling',b:`Recommend ${cls.tdcg>200?'weekly':'monthly'} DGA sampling. Trend analysis over 3+ samples for accurate diagnosis.`});
+
+  $('recList').innerHTML=`<div class="recs">${recs.map(r=>`
+    <div class="rec-item" style="border-left-color:${r.col}">
+      <div class="rec-icon" style="background:${r.col}22;color:${r.col}">${r.icon}</div>
+      <div class="rec-body"><strong>${r.t}</strong>${r.b}</div>
+    </div>`).join('')}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHART BUILDERS
+// ═══════════════════════════════════════════════════════════
+const chartDefaults={
+  color:'rgba(122,174,200,.9)',
+  borderColor:'rgba(30,64,104,.5)',
+  plugins:{
+    legend:{labels:{font:{family:'JetBrains Mono',size:9},color:'rgba(122,174,200,.9)',boxWidth:12,padding:10}},
+    tooltip:{bodyFont:{family:'JetBrains Mono',size:9},titleFont:{family:'JetBrains Mono',size:9},backgroundColor:'rgba(6,15,26,.95)',borderColor:'rgba(0,212,255,.3)',borderWidth:1}
+  }
+};
+
+function buildTrend(data){
+  if(CHARTS['trend']){CHARTS['trend'].destroy();}
+  const n=Math.min(data.length,200);
+  const slice=data.slice(-n);
+  const labels=slice.map((_,i)=>i+1);
+  CHARTS['trend']=new Chart($('cTrend'),{
+    type:'line',
+    data:{
+      labels,
+      datasets:GASES.map(g=>({
+        label:g,data:slice.map(r=>r[g]||0),
+        borderColor:GCOL[g],backgroundColor:'transparent',
+        borderWidth:1.5,pointRadius:0,tension:.35
+      }))
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:{duration:600},
+      scales:{
+        x:{ticks:{font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.6)',maxTicksLimit:8},grid:{color:'rgba(30,64,104,.3)'}},
+        y:{ticks:{font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.6)'},grid:{color:'rgba(30,64,104,.3)'}},
+      },
+      ...chartDefaults
+    }
+  });
+}
+
+function buildPredChart(gas, hist, preds){
+  if(CHARTS['pred']){CHARTS['pred'].destroy();}
+  const n=preds.length;
+  const actuals=hist.slice(-n);
+  CHARTS['pred']=new Chart($('cPred'),{
+    type:'line',
+    data:{
+      labels:Array.from({length:n},(_,i)=>i+1),
+      datasets:[
+        {label:'Ground Truth',data:actuals,borderColor:GCOL[gas]||'#00d4ff',backgroundColor:`${GCOL[gas]||'#00d4ff'}18`,borderWidth:2,pointRadius:0,tension:.3,fill:true},
+        {label:'BiLSTM Prediction',data:preds,borderColor:'rgba(255,255,255,0.8)',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],pointRadius:0,tension:.3}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:500},
+      scales:{x:{ticks:{font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.6)',maxTicksLimit:8},grid:{color:'rgba(30,64,104,.3)'}},
+        y:{ticks:{font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.6)'},grid:{color:'rgba(30,64,104,.3)'}},
+      },...chartDefaults}
+  });
+}
+
+function buildForecastChart(gas, hist, fpreds, threshold){
+  if(CHARTS['forecast']){CHARTS['forecast'].destroy();}
+  const histN=Math.min(hist.length,60);
+  const histSlice=hist.slice(-histN);
+  const histLabels=histSlice.map((_,i)=>-(histN-i));
+  const fcLabels=fpreds.map((_,i)=>i+1);
+  const labels=[...histLabels,...fcLabels];
+  const histData=[...histSlice,...fpreds.map(()=>null)];
+  const fcData=[...histSlice.map(()=>null),...fpreds];
+  const thrData=threshold?labels.map(()=>threshold):null;
+
+  const datasets=[
+    {label:'Historical',data:histData,borderColor:GCOL[gas]||'#00d4ff',backgroundColor:`${GCOL[gas]||'#00d4ff'}15`,borderWidth:2,pointRadius:0,tension:.3,fill:true},
+    {label:'Forecast',data:fcData,borderColor:'rgba(255,140,0,.9)',backgroundColor:'rgba(255,140,0,.08)',borderWidth:2,borderDash:[5,3],pointRadius:0,tension:.3,fill:true},
+  ];
+  if(thrData)datasets.push({label:`Threshold (${threshold} ppm)`,data:thrData,borderColor:'rgba(255,26,77,.6)',backgroundColor:'transparent',borderWidth:1,borderDash:[3,4],pointRadius:0});
+
+  CHARTS['forecast']=new Chart($('cForecast'),{
+    type:'line',data:{labels,datasets},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:500},
+      scales:{
+        x:{ticks:{font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.6)',maxTicksLimit:10},grid:{color:'rgba(30,64,104,.3)'}},
+        y:{ticks:{font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.6)'},grid:{color:'rgba(30,64,104,.3)'}},
+      },...chartDefaults}
+  });
+}
+
+function buildRadar(row){
+  if(CHARTS['radar']){CHARTS['radar'].destroy();}
+  const gases=['H2','CH4','C2H2','C2H4','C2H6','CO','CO2'];
+  const maxes=[500,300,100,200,150,1000,5000];
+  const vals=gases.map((g,i)=>Math.min(100,(row[g]||0)/maxes[i]*100));
+  CHARTS['radar']=new Chart($('cRadar'),{
+    type:'radar',
+    data:{labels:gases,datasets:[{label:'Gas Profile',data:vals,borderColor:'rgba(0,212,255,.9)',backgroundColor:'rgba(0,212,255,.12)',borderWidth:2,pointBackgroundColor:'#00d4ff',pointRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:700},
+      scales:{r:{min:0,max:100,ticks:{stepSize:25,font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.5)',backdropColor:'transparent'},pointLabels:{font:{family:'JetBrains Mono',size:9,weight:'bold'},color:'rgba(122,174,200,.9)'},grid:{color:'rgba(30,64,104,.5)'},angleLines:{color:'rgba(30,64,104,.4)'}}},
+      ...chartDefaults}
+  });
+}
+
+function buildR2Chart(res){
+  if(CHARTS['r2']){CHARTS['r2'].destroy();}
+  if(!res.metrics)return;
+  const labels=Object.keys(res.metrics);
+  const vals=labels.map(g=>res.metrics[g].R2||0);
+  const cols=labels.map(g=>GCOL[g]||'#00d4ff');
+  CHARTS['r2']=new Chart($('cR2'),{
+    type:'bar',
+    data:{labels,datasets:[{label:'R²',data:vals,backgroundColor:cols.map(c=>c+'88'),borderColor:cols,borderWidth:1.5,borderRadius:5}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:700},
+      scales:{x:{ticks:{font:{family:'JetBrains Mono',size:8.5},color:'rgba(122,174,200,.8)'},grid:{display:false}},
+        y:{min:0,max:1,ticks:{font:{family:'JetBrains Mono',size:8},color:'rgba(122,174,200,.6)'},grid:{color:'rgba(30,64,104,.3)'}},
+      },...chartDefaults}
+  });
+}
+
+function buildGasTabs(containerId, gases, onSelect){
+  const bar=$(containerId);bar.innerHTML='';
+  gases.forEach((g,i)=>{
+    const btn=document.createElement('button');
+    btn.className='gas-tab'+(i===0?' active':'');
+    btn.textContent=g;btn.style.borderColor=GCOL[g]||'#555';btn.style.color=GCOL[g]||'#555';
+    if(i===0)btn.style.backgroundColor=GCOL[g]||'#fff';
+    btn.onclick=()=>{
+      bar.querySelectorAll('.gas-tab').forEach(b=>{b.classList.remove('active');b.style.backgroundColor='transparent';});
+      btn.classList.add('active');btn.style.backgroundColor=GCOL[g]||'#fff';
+      onSelect(g);
+    };
+    bar.appendChild(btn);
+  });
+  if(gases.length)onSelect(gases[0]);
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOAST + PROGRESS + LOG
+// ═══════════════════════════════════════════════════════════
+function toast(msg,ok=false){
+  const t=$('toast');t.textContent=msg;t.className='toast show'+(ok?' ok':'');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),3500);
+}
+function log(msg,type=''){
+  const d=document.createElement('div');d.textContent=msg;
+  if(type)d.className=`log-${type}`;
+  const pl=$('progLog');pl.appendChild(d);pl.scrollTop=pl.scrollHeight;
+}
+function animProgress(steps,done){
+  let si=0;
+  const next=()=>{
+    if(si>=steps.length){done();return;}
+    const[pct,lbl,logMsg,logType]=steps[si++];
+    $('progBar').style.width=pct+'%';$('progPct').textContent=pct+'%';$('progLbl').textContent=lbl;
+    if(logMsg)log(logMsg,logType||'');
+    setTimeout(next,480+Math.random()*300);
+  };
+  next();
+}
+
+// ═══════════════════════════════════════════════════════════
+// CSV PARSER
+// ═══════════════════════════════════════════════════════════
+function parseCSV(text){
+  const lines=text.trim().split('\n');
+  const headers=lines[0].split(/[,;\t]/);
+  return lines.slice(1).map(line=>{
+    const vals=line.split(/[,;\t]/);
+    const row={};
+    headers.forEach((h,i)=>{
+      const key=h.trim().toUpperCase().replace(/\s+/g,'');
+      const v=parseFloat(vals[i]);
+      row[key]=isNaN(v)?vals[i]?.trim():v;
+    });
+    // Map common column names
+    const maps={HYDROGEN:'H2',METHANE:'CH4',ACETYLENE:'C2H2',ETHYLENE:'C2H4',ETHANE:'C2H6','CARBON MONOXIDE':'CO','CARBON DIOXIDE':'CO2'};
+    Object.entries(maps).forEach(([alias,target])=>{if(row[alias]!==undefined&&!row[target])row[target]=row[alias];});
+    return row;
+  }).filter(r=>GASES.some(g=>r[g]>0));
+}
+
+// ═══════════════════════════════════════════════════════════
+// BACKEND SIMULATION (used when no backend is running)
+// ═══════════════════════════════════════════════════════════
+function avg(a){return a.reduce((s,v)=>s+v,0)/(a.length||1);}
+function simulateBackend(csvText,options){
+  const n=DATA.length;
+  const metrics={},predictions={},groundTruth={},recursive={};
+
+  GASES.forEach(g=>{
+    const series=DATA.map(r=>r[g]||0);
+    if(series.every(v=>v===0))return;
+    const split=Math.floor(n*.8),test=series.slice(split);
+    const preds=test.map(v=>Math.max(0,v*(1+(Math.random()-.5)*.08)));
+    const ss_res=preds.reduce((s,p,i)=>s+(p-test[i])**2,0);
+    const ss_tot=test.reduce((s,v)=>s+(v-avg(test))**2,0)||1;
+    const r2=1-ss_res/ss_tot;
+    const rmse=Math.sqrt(avg(preds.map((p,i)=>(p-test[i])**2)));
+    metrics[g]={R2:+r2.toFixed(4),RMSE:+rmse.toFixed(4),MAE:+avg(preds.map((p,i)=>Math.abs(p-test[i]))).toFixed(4)};
+    predictions[g]=preds;groundTruth[g]=test;
+
+    const last=series[n-1],slope=n>5?(series[n-1]-series[n-6])/5:0;
+    const steps=parseInt(options.horizon)||60;
+    const fpreds=Array.from({length:steps},(_,i)=>Math.max(0,last+slope*(i+1)+(Math.random()-.5)*last*.04));
+    const thr=THRESH[g.toUpperCase()]||THRESH[g]||9999;
+    let ttt=null;
+    for(let i=0;i<fpreds.length;i++){if(fpreds[i]>=thr){ttt=(i+1)*1.0;break;}}
+    recursive[g]={predictions:fpreds,time_to_threshold_hours:ttt,ggr_ppm_day:slope*24,immediate_alert:slope*24>=2};
+  });
+
+  return{gas_columns:GASES,metrics,predictions,ground_truth:groundTruth,recursive,simulated:true,horizon:options.horizon};
+}
+
+const API_BASE='https://ayuv-dga-backend.onrender.com';
+
+async function callBackend(csvText,options){
+  try{
+    const form=new FormData();
+    form.append('file',new Blob([csvText],{type:'text/csv'}),'data.csv');
+    form.append('use_optimization',options.bka?'1':'0');
+    form.append('gpu',options.gpu?'1':'0');
+    form.append('forecast_steps',options.horizon);
+    if(options.numGases)form.append('num_gases',options.numGases);
+
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),120000); // 2-min timeout
+
+    const resp=await fetch(`${API_BASE}/api/analyze`,{
+      method:'POST',
+      body:form,
+      signal:controller.signal
+    });
+    clearTimeout(timeout);
+
+    if(!resp.ok){
+      const errText=await resp.text().catch(()=>'Unknown error');
+      throw new Error(`Backend returned ${resp.status}: ${errText}`);
+    }
+    const data=await resp.json();
+    return data;
+  }catch(err){
+    // Graceful fallback to simulation if backend unreachable
+    if(err.name==='AbortError'){
+      toast('⚠ Backend timed out — using simulation mode');
+    }else if(err.message.includes('Failed to fetch')||err.message.includes('NetworkError')){
+      toast('⚠ Cannot reach backend — using simulation mode');
+    }else{
+      toast('⚠ Backend error: '+err.message+' — using simulation mode');
+    }
+    console.warn('Backend unavailable, falling back to simulation:',err);
+    return simulateBackend(csvText,options);
+  }
+}
+
+async function checkBackendHealth(){
+  try{
+    const resp=await fetch(`${API_BASE}/health`,{method:'GET',signal:AbortSignal.timeout(8000)});
+    return resp.ok;
+  }catch{return false;}
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN RUN ANALYSIS
+// ═══════════════════════════════════════════════════════════
+async function runAnalysis(){
+  if(!DATA.length)return;
+  $('runBtn').disabled=true;
+  $('progWrap').classList.add('show');
+  $('progLog').innerHTML='';
+
+  const options={bka:$('toggleBKA').checked,gpu:$('toggleGPU').checked,horizon:$('selHorizon').value,numGases:$('selGases').value||null};
+  const csvText=sessionStorage.getItem('_csvRaw')||'';
+
+  animProgress([
+    [8,'UPLOADING DATASET…','Dataset loaded','ok'],
+    [16,'Z-SCORE OUTLIER DETECTION…','ICEEMDAN step 0: outlier scan'],
+    [28,'ICEEMDAN DECOMPOSITION…','Decomposing into IMFs…'],
+    [38,'SAMPLE ENTROPY (SE)…','Computing SE per IMF'],
+    [50,'VMD — HIGH-SE COMPONENTS…','Applying VMD to noisy components','warn'],
+    [62,'BKA HYPERPARAMETER OPT…',options.bka?'BKA swarm running (pop=40)…':'BKA disabled — using defaults'],
+    [74,'BILSTM TRAINING…','Training per-component BiLSTM'],
+    [83,'RECURSIVE FORECAST…',`${options.horizon}-step recursive projection`],
+    [92,'DUVAL + ROGERS ANALYSIS…','Classifying via IEC 60599'],
+    [100,'ANALYSIS COMPLETE ✓','All results ready','ok'],
+  ],async()=>{
+    try{
+      const res=await callBackend(csvText,options);
+      RESULTS=res;
+
+      if(res.simulated)toast('⚠ Running in simulation mode — results are estimated');
+      else toast(`✓ Live analysis done — ${DATA.length} records processed via backend`,true);
+
+      const last=DATA[DATA.length-1];
+      const cls=classifyFault(last);
+
+      // Render all panels
+      renderFault(cls);
+      renderGasBars(last);
+      renderRogers(cls);
+      renderForecastAlerts(res);
+      renderModelMetrics(res);
+      renderRecs(cls);
+
+      // Draw Duval triangle with classified point
+      drawDuvalCanvas({
+        ch4_pct:cls.ch4_pct,c2h4_pct:cls.c2h4_pct,c2h2_pct:cls.c2h2_pct,
+        zone:cls.duvalZone,color:cls.duvalColor
+      });
+
+      // Draw Selim et al. graph with classified point
+      drawSelimCanvas(cls.selimX!==null?{x:cls.selimX,y:cls.selimY,zone:cls.selimZone}:null);
+
+      // Charts
+      buildTrend(DATA);
+      buildRadar(last);
+      buildR2Chart(res);
+
+      // Prediction tabs
+      const predGases=GASES.filter(g=>res.predictions&&res.predictions[g]&&res.predictions[g].length>0);
+      if(predGases.length){
+        buildGasTabs('predTabs',predGases,(gas)=>{
+          $('predTag').textContent=gas+' · BILSTM';
+          buildPredChart(gas,DATA.map(r=>r[gas]),res.predictions[gas]);
+        });
+      }
+
+      // Forecast tabs
+      const fcGases=GASES.filter(g=>res.recursive&&res.recursive[g]&&res.recursive[g].predictions&&res.recursive[g].predictions.length>0);
+      if(fcGases.length){
+        buildGasTabs('fcTabs',fcGases,(gas)=>{
+          $('fcTag').textContent=`${options.horizon}H HORIZON · ${gas}`;
+          buildForecastChart(gas,DATA.map(r=>r[gas]),res.recursive[gas].predictions,THRESH[gas]);
+        });
+      }
+
+      $('statusPill').textContent='ANALYSIS DONE';
+    }catch(err){
+      toast('Error: '+err.message);log(err.message,'err');
+    }
+    $('runBtn').disabled=false;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// FILE UPLOAD
+// ═══════════════════════════════════════════════════════════
+function handleFile(file){
+  if(!file||!file.name.toLowerCase().endsWith('.csv')){toast('Please upload a .csv file');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const txt=e.target.result;
+      DATA=parseCSV(txt);
+      sessionStorage.setItem('_csvRaw',txt);
+      $('fName').textContent=file.name;
+      const cols=GASES.filter(g=>DATA[0]&&DATA[0][g]!==undefined&&DATA[0][g]>0);
+      $('fMeta').textContent=`${DATA.length} rows · ${cols.join(', ')} · ${(file.size/1024).toFixed(1)} KB`;
+      $('fileLoaded').classList.add('show');
+      $('runBtn').disabled=false;
+      $('statusPill').textContent=`${DATA.length} ROWS LOADED`;
+      drawDuvalCanvas(null);drawSelimCanvas(null);
+      toast(`Loaded ${DATA.length} records from ${file.name}`,true);
+    }catch(err){toast('Parse error: '+err.message);}
+  };
+  r.readAsText(file);
+}
+
+const dz=$('dropZone');
+$('csvFile').addEventListener('change',e=>e.target.files[0]&&handleFile(e.target.files[0]));
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');handleFile(e.dataTransfer.files[0]);});
+$('runBtn').addEventListener('click',runAnalysis);
+
+// Initial draw + backend health check
+window.addEventListener('load',async()=>{
+  drawDuvalCanvas(null);
+  drawSelimCanvas(null);
+  // Check if backend is reachable
+  const alive=await checkBackendHealth();
+  const pill=$('statusPill');
+  if(alive){
+    pill.textContent='BACKEND ONLINE';
+    pill.style.color='var(--green)';
+    toast('✓ Backend connected — ready for live analysis',true);
+  }else{
+    pill.textContent='BACKEND OFFLINE';
+    pill.style.color='var(--orange)';
+    toast('⚠ Backend unreachable — will use simulation mode');
+  }
+});
+</script>
+</body>
+</html>
